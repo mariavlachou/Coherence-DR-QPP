@@ -1,2 +1,2 @@
 # Coherence-DR-QPP
-Source code and explanation to reproduce our proposed QPP predictors and methodology for dense coherence-based predictors.
+Here, we provde the source code and an explanation of how to use and reproduce the results for our proposed dense coherence-based QPP predictors and the model seletion methodology that we used to study them.
