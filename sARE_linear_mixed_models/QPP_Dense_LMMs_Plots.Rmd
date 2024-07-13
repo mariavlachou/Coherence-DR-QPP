@@ -1,0 +1,180 @@
+---
+title: "RCode and Instructions for Figure 3"
+bibliography: biblio.bib
+nocite: | 
+  @tidyverse
+output: 
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+    toc_depth: 4
+    number_sections: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+
+#### load required libraries for our simulation & analysis
+library(tidyverse) # for data wrangling and plotting
+library(broom) # for tidy model output
+library(lme4)
+library(ggplot2)
+
+# set the seed
+set.seed(1991) # for reproducible simulations
+```
+
+## Table of Contents
+
+### Preliminaries
+We share the code that can be used to reproduce the LMMs in our paper and the corresponding plots in Figure 3 in our paper [@vlachou2024coherence]. 
+To reproduce our results in Section 6, you need to: (i) install R, (ii) install RStudio (a version compatible with R and suited to your operating system), or alternatively use RStudio Desktop and import the datasets. Then, you need to make sure you have installed the required libraries, specifically lme4 [@bates2009package] and ggplot2 [@wickham2016package]:
+
+```{r libs}
+library(lme4) #for LMMs
+library(ggplot2) #for plots
+```
+
+When this is done, just load the per query sARE datatsets for each evaluation metric. Remember that we apply our LMMs on each metric separately. In this tutorial, we will demonstrate a few examples, but the reader can use it on any metric and retrieval method, simply by replacing with another csv file or by producing their own per query sARE files.
+
+```{r loaddata}
+############# Load datatsets with per query sARE ###########################################
+######## MAP@100 ######
+all_map <- read.csv("all_preds_map.csv", header=TRUE) 
+## rename variables of interest
+names(all_map)[names(all_map) == "sare"] <- "sARE" 
+names(all_map)[names(all_map) == "source"] <- "predictor"
+names(all_map)[names(all_map) == "cat"] <- "QType"
+### convert query type to factor variable
+all_map$QType<-as.factor(all_map$QType)
+all_map$sARE<-abs(all_map$sARE)
+## convert qpp predictor to factor variable
+all_map$pred_cat<-as.factor(all_map$predictor)
+#levels(all_map$pred_cat)
+## rename levels of qpp predictor variable to actual predictor names
+levels(all_map$pred_cat) <- c("WAND-embs","WD-embs", "AC-embs", "PairRatio", "A-PairRatio", "BERT(bi)","BERT(ce)","monoT5","MAX", "NQC", "RSD")
+names(all_map)[names(all_map) == "pred_cat"] <- "Predictor"
+
+####### NDCG@10 ###### repeat process as above
+all_ndcg <- read.csv("sARE_ndcg_tct_all.csv", header=TRUE)
+names(all_ndcg)[names(all_ndcg) == "sare"] <- "sARE"
+names(all_ndcg)[names(all_ndcg) == "source"] <- "predictor"
+names(all_ndcg)[names(all_ndcg) == "cat"] <- "QType"
+
+all_ndcg$QType<-as.factor(all_ndcg$QType)
+all_ndcg$sARE<-abs(all_ndcg$sARE)
+all_ndcg$pred_cat<-as.factor(all_ndcg$predictor)
+#levels(all_ndcg$pred_cat)
+levels(all_ndcg$pred_cat) <- c("WAND-embs","WD-embs", "AC-embs", "PairRatio", "A-PairRatio", "BERT(bi)","BERT(ce)","monoT5","MAX", "NQC", "RSD")
+names(all_ndcg)[names(all_ndcg) == "pred_cat"] <- "Predictor"
+
+###### MRR@10 #####
+all_mrr <- read.csv("sARE_mrr_tct_all.csv", header=TRUE) ## repeat process as above to get MRR results
+```
+
+In any case, the resulting dataset should have the following form:
+
+```{r format}
+head(all_map)
+tail(all_map)
+```
+
+This dataset contains the query id, the evaluation metric value (per query), the per query sARE, the QPP predictor coded with a number, the collection the query belongs to (DL 19 or 20), the query type resulting from the classifier proposed in the original study [@bolotova2022non], and the QPP predictor expressed in words. Having obtained our dataset, we can now apply the LMMs.
+
+### Linear Mixed Models 
+
+We now apply the LMMs in the order proposed in Section 6. 
+
+#### LMM definition and output
+
+We start with LMM_average, and then we add sequentially: first, we move to LMM_QPP (add level 1 predictor) and then to LMM_full (add level 2 predictor). We demonstrate an example with MAP that shows the fitting and the output of the three models for TCT-ColBERT. We can see the output of each model by obtaining a summary. The models output the deviance for each model. For significance of single fixed effect terms, please consider the t-value, or the combination of the estimate and the standard error in the output. Each model also outputs the variance components (Variance in Random effects) for each level. 
+```{r lmmsmap}
+################# FIT LMM MODELS ########################
+######## MAP ALL MODELS ###################
+#LMM_average
+umm_map <- lmer(sARE ~ 1 + (1|qid), REML="false", data = all_map) 
+summary(umm_map)
+
+#LMM_QPP
+ugm_map <- lmer(sARE ~ 1 + predictor + (1+predictor|qid), REML="false", data = all_map)
+summary(ugm_map)
+
+#LMM_full (= model with group-level predictors)
+mp_map<- lmer(sARE ~ 1 + predictor* QType +  (1+predictor|qid), REML="false", data = all_map) 
+summary(mp_map)
+```
+Now we continue with the corresponding LMMs for NDCG.
+
+```{r lmmsndcg}
+####### NDCG ALL MODELS ########
+umm_ndcg <- lmer(sARE ~ 1 + (1|qid), REML="false", data = all_ndcg) 
+#summary(umm_ndcg) ### uncomment this part to get the summary of the model results
+
+ugm_ndcg <- lmer(sARE ~ 1 + predictor + (1+predictor|qid), REML="false", data = all_ndcg)
+#summary(ugm_ndcg)
+
+mp_ndcg<- lmer(sARE ~ 1 + predictor* QType +  (1+predictor|qid), REML="false", data = all_ndcg) 
+#summary(mp_ndcg)
+#### repeat process for MRR@10 ####
+```
+
+After demonstrating how we obtain the LMMs for TCT-ColbERT, we can easily obtain the ones for ANCE and BM25 by using the corresponding csv input files. Alternatively, you can crete your own input files, as described above.
+
+
+#### Visual Inspection
+This is the part where we reproduce the plots in Figure 3 of the paper. Specifically, we compare and contrast the full models for MAP and NDCG (LMM_full), as defined above.
+
+```{r plotsfinal}
+######## PLOTS for Figure 3 ######
+##### MAP #####
+ggplot(all_map, aes(x=predictor, y=sARE, colour=Predictor)) +
+  facet_grid(~QType) +
+  geom_point(size=0.1) +
+  geom_line(aes(y=predict(mp_map),group=QType,
+                color=Predictor),size=2) +
+  scale_x_continuous(breaks=seq(0, 10, 1),
+                     labels=c("WAND-embs","WD-embs", "AC-embs", "PairRatio", "A-PairRatio", "BERT(bi)","BERT(ce)","monoT5","MAX", "NQC", "RSD")) +
+  theme(axis.text.x = element_text(color="black", 
+                                   size=5, angle=90),
+        axis.text.y = element_text(color="black", 
+                                   size=5, angle=90)) +
+  scale_color_hue(labels=c("Control" = "W-embs","WD-embs", "AC-embs", "PairRatio", "A-PairRatio", "BERT(bi)","BERT(ce)","monoT5","MAX", "NQC", "RSD")) 
+
+######## NDCG ############
+ggplot(all_ndcg, aes(x=predictor, y=sARE, colour=Predictor)) +
+  facet_grid(~QType) +
+  geom_point(size=0.1) +
+  geom_line(aes(y=predict(mp_ndcg),group=QType,
+                color=Predictor),size=2) +
+  scale_x_continuous(breaks=seq(0, 10, 1),
+                     labels=c("WAND-embs","WD-embs", "AC-embs", "PairRatio", "A-PairRatio", "BERT(bi)","BERT(ce)","monoT5","MAX", "NQC", "RSD")) +
+  theme(axis.text.x = element_text(color="black", 
+                                   size=5, angle=90),
+        axis.text.y = element_text(color="black", 
+                                   size=5, angle=90)) +
+  scale_color_hue(labels=c("Control" = "W-embs","WD-embs", "AC-embs", "PairRatio", "A-PairRatio", "BERT(bi)","BERT(ce)","monoT5","MAX", "NQC", "RSD")) 
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## References
